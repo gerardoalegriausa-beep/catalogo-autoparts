@@ -23,7 +23,8 @@ reducir las devoluciones por incompatibilidad.
 - **Seguimiento** (`/pedido/<enlace>`): línea de tiempo con los 6 estados
   (Recibido → VIN verificado → Comprado en EE. UU. → Recibido en Miami → En
   aduanas → Entregado) y fecha estimada de entrega.
-- **Panel** (`/admin`): pedidos por validar / en curso / entregados. Para pasar a
+- **Panel** (`/admin`): pedidos por validar / en curso / entregados, y carga de
+  repuestos desde una hoja de cálculo (`/admin/repuestos`). Para pasar a
   "VIN verificado" hay que confirmar que se revisó el número de parte en el
   catálogo original. Botón para avisar al taller por WhatsApp con el enlace de
   seguimiento y notas internas por pedido.
@@ -45,15 +46,17 @@ panel en demo es `demo`.
 
 1. **Supabase** (gratis para empezar): crea un proyecto en https://supabase.com.
    En *SQL Editor* pega y ejecuta `supabase/migrations/0001_init.sql`.
-2. **Repuestos**: edita `data/repuestos-ejemplo.csv` (se puede abrir en Google
-   Sheets o Excel y guardar como CSV) y súbelo:
+2. **Repuestos**: entra al panel → **Repuestos**. Descarga la hoja actual,
+   ábrela en Google Sheets o Excel, agrega o cambia filas, guárdala como CSV y
+   súbela. Verás qué piezas son nuevas y cuáles cambian antes de confirmar; si
+   alguna fila tiene errores no se guarda nada. Se aceptan CSV con "," o ";"
+   (Excel en español) y decimales con coma.
+   También se puede cargar desde la terminal:
    ```bash
    cp .env.example .env.local   # completa SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY
    npm run import-parts -- data/repuestos-ejemplo.csv --dry-run   # solo valida
    npm run import-parts -- data/repuestos-ejemplo.csv             # sube
    ```
-   También puedes editar piezas en *Table Editor* de Supabase. Después pulsa
-   **Refrescar catálogo** en el panel.
 3. **Vercel**: importa este repositorio en https://vercel.com/new y carga las
    variables de `.env.example` (como mínimo `SUPABASE_URL`,
    `SUPABASE_SERVICE_ROLE_KEY` y `ADMIN_PASSWORD`).

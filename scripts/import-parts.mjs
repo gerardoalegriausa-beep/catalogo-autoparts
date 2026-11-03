@@ -10,7 +10,7 @@
 
 import { readFileSync, existsSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
-import { parseCsv, rowsToParts } from "./parts-csv.mjs";
+import { parseCsv, rowsToParts } from "../src/lib/parts-csv.ts";
 
 const args = process.argv.slice(2);
 const file = args.find((a) => !a.startsWith("--"));

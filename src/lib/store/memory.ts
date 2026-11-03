@@ -1,14 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { DEMO_PARTS } from "../../data/demo-catalog";
-import type { NewOrderInput, Order, OrderStatus } from "../types";
+import { importToPart } from "../parts-csv";
+import type { NewOrderInput, Order, OrderStatus, Part } from "../types";
 import { newReference, newTrackingToken } from "./ids";
 import type { Store } from "./types";
 
 // Modo demostración: piezas de ejemplo y pedidos en memoria. Los pedidos se
 // pierden al reiniciar el servidor. Para producción configura Supabase.
 
-const globalOrders = globalThis as unknown as { __demoOrders?: Map<string, Order> };
-const orders = (globalOrders.__demoOrders ??= new Map<string, Order>());
+const g = globalThis as unknown as { __demoOrders?: Map<string, Order>; __demoParts?: Part[] };
+const orders = (g.__demoOrders ??= new Map<string, Order>());
+const parts = (g.__demoParts ??= structuredClone(DEMO_PARTS));
 
 const clone = <T>(v: T): T => structuredClone(v);
 
@@ -16,7 +18,21 @@ export const memoryStore: Store = {
   kind: "demo",
 
   async listParts() {
-    return clone(DEMO_PARTS.filter((p) => p.active));
+    return clone(parts.filter((p) => p.active));
+  },
+
+  async listAllParts() {
+    return clone(parts);
+  },
+
+  async upsertParts(items) {
+    for (const item of items) {
+      const idx = parts.findIndex((p) => p.slug === item.part.slug);
+      const id = idx >= 0 ? parts[idx].id : randomUUID();
+      const next = importToPart(item, id);
+      if (idx >= 0) parts[idx] = { ...next, imageUrl: parts[idx].imageUrl };
+      else parts.push(next);
+    }
   },
 
   async createOrder(input: NewOrderInput) {

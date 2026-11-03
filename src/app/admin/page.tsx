@@ -37,7 +37,10 @@ async function Orders({ searchParams }: { searchParams: Promise<Record<string, s
     <div className="mx-auto max-w-6xl px-4 py-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">Pedidos</h1>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Link href="/admin/repuestos" className="btn-primary">
+            Repuestos
+          </Link>
           <form action={refreshCatalog}>
             <button className="btn-secondary" type="submit" title="Vuelve a leer las piezas desde la base de datos">
               Refrescar catálogo

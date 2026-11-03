@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Fitment, NewOrderInput, Order, OrderEvent, OrderStatus, Part } from "../types";
+import type { PartImport } from "../parts-csv";
 import { newReference, newTrackingToken } from "./ids";
 import type { Store } from "./types";
 
@@ -108,6 +109,28 @@ export const supabaseStore: Store = {
   async listParts() {
     const rows = check(await db().from("parts").select("*, part_fitments(*)").eq("active", true).order("name"));
     return (rows as Row[]).map(toPart);
+  },
+
+  async listAllParts() {
+    const rows = check(await db().from("parts").select("*, part_fitments(*)").order("name"));
+    return (rows as Row[]).map(toPart);
+  },
+
+  async upsertParts(items: PartImport[]) {
+    if (items.length === 0) return;
+    const saved = check(
+      await db()
+        .from("parts")
+        .upsert(
+          items.map((i) => i.part),
+          { onConflict: "slug" },
+        )
+        .select("id, slug"),
+    ) as { id: string; slug: string }[];
+    const idBySlug = new Map(saved.map((r) => [r.slug, r.id]));
+    check(await db().from("part_fitments").delete().in("part_id", [...idBySlug.values()]));
+    const fitRows = items.flatMap((i) => i.fitments.map((f) => ({ ...f, part_id: idBySlug.get(i.part.slug) })));
+    if (fitRows.length) check(await db().from("part_fitments").insert(fitRows));
   },
 
   async createOrder(input: NewOrderInput) {
