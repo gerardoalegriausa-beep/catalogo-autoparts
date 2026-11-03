@@ -1,16 +1,32 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
-import { MODEL_NAMES } from "@/lib/catalog-labels";
+import { MODEL_NAMES, MODELS } from "@/lib/catalog-labels";
+import type { ModelId } from "@/lib/types";
 import { checkVin, normalizeVin } from "@/lib/vin";
 import type { VinInspection } from "@/lib/vin-inspection";
 import { createOrder, previewVin, type OrderFormState } from "../actions";
 
 const initial: OrderFormState = { errors: {}, message: null, values: {} };
 
-export function OrderForm({ slug, highRisk }: { slug: string; highRisk: boolean }) {
+export function OrderForm({
+  slug,
+  highRisk,
+  years,
+  initialModel,
+  initialYear,
+}: {
+  slug: string;
+  highRisk: boolean;
+  years: number[];
+  initialModel?: ModelId;
+  initialYear?: number;
+}) {
   const [state, action, pending] = useActionState(createOrder.bind(null, slug), initial);
   const [vin, setVin] = useState(state.values.vin ?? "");
+  const [model, setModel] = useState<string>(initialModel ?? "");
+  const [year, setYear] = useState<string>(initialYear ? String(initialYear) : "");
+  const [autoFilled, setAutoFilled] = useState(false);
   const [preview, setPreview] = useState<VinInspection | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [checking, startCheck] = useTransition();
@@ -19,18 +35,30 @@ export function OrderForm({ slug, highRisk }: { slug: string; highRisk: boolean 
   const local = clean.length === 17 ? checkVin(clean) : null;
   const previewIsCurrent = preview?.vin === clean;
 
-  function runPreview(value: string) {
+  function runPreview(value: string, m = model, y = year) {
     const v = normalizeVin(value);
     if (v.length !== 17 || !checkVin(v).valid) return;
     startCheck(async () => {
-      const res = await previewVin(slug, v);
+      const res = await previewVin(slug, v, m, y);
       if ("error" in res) {
         setPreviewError(res.error);
         setPreview(null);
-      } else {
-        setPreviewError(null);
-        setPreview(res);
+        return;
       }
+      setPreviewError(null);
+      setPreview(res);
+      // Si el taller aún no eligió modelo o año, se completan con lo que dice el VIN.
+      const car = res.vehicle;
+      let filled = false;
+      if (!m && car?.modelId) {
+        setModel(car.modelId);
+        filled = true;
+      }
+      if (!y && car?.source === "nhtsa" && car.modelYear && years.includes(car.modelYear)) {
+        setYear(String(car.modelYear));
+        filled = true;
+      }
+      if (filled) setAutoFilled(true);
     });
   }
 
@@ -67,6 +95,64 @@ export function OrderForm({ slug, highRisk }: { slug: string; highRisk: boolean 
           {local && !local.valid && <p className="mt-2 text-sm text-bad">{local.errors.join(" ")}</p>}
           {err.vin && <p className="mt-2 text-sm text-bad">{err.vin}</p>}
         </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label htmlFor="vehicleModel" className="label">
+              Modelo *
+            </label>
+            <select
+              id="vehicleModel"
+              name="vehicleModel"
+              value={model}
+              onChange={(e) => {
+                setModel(e.target.value);
+                setAutoFilled(false);
+                runPreview(vin, e.target.value, year);
+              }}
+              aria-invalid={Boolean(err.vehicleModel)}
+              className="field"
+            >
+              <option value="" disabled>
+                Elige el modelo
+              </option>
+              {MODELS.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name} ({m.bodyType})
+                </option>
+              ))}
+            </select>
+            {err.vehicleModel && <p className="mt-1 text-sm text-bad">{err.vehicleModel}</p>}
+          </div>
+          <div>
+            <label htmlFor="vehicleYear" className="label">
+              Año *
+            </label>
+            <select
+              id="vehicleYear"
+              name="vehicleYear"
+              value={year}
+              onChange={(e) => {
+                setYear(e.target.value);
+                setAutoFilled(false);
+                runPreview(vin, model, e.target.value);
+              }}
+              aria-invalid={Boolean(err.vehicleYear)}
+              className="field"
+            >
+              <option value="" disabled>
+                Elige el año
+              </option>
+              {years.map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </select>
+            {err.vehicleYear && <p className="mt-1 text-sm text-bad">{err.vehicleYear}</p>}
+          </div>
+        </div>
+        {autoFilled && <p className="text-xs text-ink-soft">Completamos modelo y año con lo que dice el VIN. Revísalos.</p>}
 
         {checking && <p className="text-sm text-ink-soft">Leyendo el VIN…</p>}
         {previewError && <p className="text-sm text-bad">{previewError}</p>}
@@ -151,7 +237,9 @@ export function OrderForm({ slug, highRisk }: { slug: string; highRisk: boolean 
         <button
           type="submit"
           className="btn-primary w-full sm:w-auto"
-          disabled={pending || (previewIsCurrent && preview?.fitment?.status === "incompatible")}
+          disabled={
+            pending || (previewIsCurrent && (preview?.fitment?.status === "incompatible" || Boolean(preview?.mismatch)))
+          }
         >
           {pending ? "Enviando…" : "Enviar pedido"}
         </button>
@@ -167,14 +255,16 @@ function VinPreview({ preview }: { preview: VinInspection }) {
   const car = preview.vehicle;
   const status = preview.fitment?.status;
   const tone =
-    !preview.valid || status === "incompatible"
+    !preview.valid || status === "incompatible" || preview.mismatch
       ? "border-bad/30 bg-bad-soft text-bad"
       : status === "compatible"
         ? "border-ok/30 bg-ok-soft text-ok"
         : "border-warn/30 bg-warn-soft text-warn";
   const title = !preview.valid
     ? "VIN no válido para este catálogo"
-    : status === "compatible"
+    : preview.mismatch
+      ? "El VIN no coincide con el vehículo elegido"
+      : status === "compatible"
       ? "Compatible"
       : status === "incompatible"
         ? "No corresponde a tu vehículo"
@@ -196,7 +286,8 @@ function VinPreview({ preview }: { preview: VinInspection }) {
           {e}
         </p>
       ))}
-      {preview.fitment && <p className="mt-1">{preview.fitment.reason}</p>}
+      {preview.mismatch && <p className="mt-1">{preview.mismatch}</p>}
+      {preview.fitment && !preview.mismatch && <p className="mt-1">{preview.fitment.reason}</p>}
       {preview.warnings.map((w) => (
         <p key={w} className="mt-1 text-xs text-ink-soft">
           {w}

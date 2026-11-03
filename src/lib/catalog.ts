@@ -1,6 +1,7 @@
 import "server-only";
 import { cacheLife, cacheTag } from "next/cache";
 import { getStore } from "./store";
+import { yearOptions } from "./catalog-filter";
 import { fitsModelYear } from "./fitment";
 import type { Part, PartFilter } from "./types";
 
@@ -12,6 +13,13 @@ export async function getParts(): Promise<Part[]> {
   cacheLife("hours");
   cacheTag(CATALOG_TAG);
   return getStore().listParts();
+}
+
+/** Años para los selectores de vehículo (se recalcula una vez al día). */
+export async function getVehicleYears(): Promise<number[]> {
+  "use cache";
+  cacheLife("days");
+  return yearOptions(new Date().getFullYear());
 }
 
 export async function getPartBySlug(slug: string): Promise<Part | null> {

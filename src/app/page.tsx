@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { CategoryIcon } from "@/components/category-icon";
 import { PartCard } from "@/components/part-card";
-import { VinSearch } from "@/components/vin-search";
-import { getParts } from "@/lib/catalog";
-import { CATEGORIES, MODELS } from "@/lib/catalog-labels";
+import { Finder } from "@/components/finder";
+import { VehiclePicker } from "@/components/vehicle-picker";
+import { getParts, getVehicleYears } from "@/lib/catalog";
+import { CATEGORIES } from "@/lib/catalog-labels";
 import { getStageDays } from "@/lib/config";
 import { totalLeadDays } from "@/lib/eta";
 
@@ -18,6 +19,7 @@ export default async function Home() {
   const parts = await getParts();
   const featured = parts.slice(0, 6);
   const leadDays = totalLeadDays(getStageDays());
+  const years = await getVehicleYears();
 
   return (
     <>
@@ -33,30 +35,12 @@ export default async function Home() {
               flete, aranceles e IGV incluidos, y entrega en tu taller en unos {leadDays} días.
             </p>
           </div>
-          <div className="rounded-xl bg-white p-5 text-ink shadow-lg">
-            <h2 className="font-semibold">Busca por VIN</h2>
-            <p className="mb-3 mt-1 text-sm text-ink-soft">Te mostramos solo las piezas que corresponden al vehículo.</p>
-            <VinSearch compact />
-          </div>
+          <Finder vehiclePicker={<VehiclePicker years={years} />} />
         </div>
       </section>
 
       <section className="mx-auto max-w-6xl px-4 py-12">
-        <h2 className="text-xl font-bold">Elige el modelo</h2>
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
-          {MODELS.map((m) => (
-            <Link
-              key={m.id}
-              href={`/catalogo?modelo=${m.id}`}
-              className="card px-4 py-5 text-center transition-shadow hover:shadow-md"
-            >
-              <span className="block text-xl font-bold text-brand">{m.name}</span>
-              <span className="text-xs text-ink-soft">{m.bodyType}</span>
-            </Link>
-          ))}
-        </div>
-
-        <h2 className="mt-12 text-xl font-bold">Categorías</h2>
+        <h2 className="text-xl font-bold">O explora por categoría</h2>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {CATEGORIES.map((c) => (
             <Link

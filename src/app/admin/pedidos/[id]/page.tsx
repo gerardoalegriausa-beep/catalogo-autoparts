@@ -84,8 +84,9 @@ async function AdminOrder({ params }: { params: Promise<{ id: string }> }) {
             <h2 className="font-semibold">Validación del VIN</h2>
             <p className="mt-3 font-mono text-lg tracking-wider">{order.vin}</p>
             <dl className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
-              <Info label="Vehículo" value={car ? [car.make, car.modelId ? MODEL_NAMES[car.modelId] : car.model].filter(Boolean).join(" ") : null} />
-              <Info label="Año" value={car?.modelYear ? String(car.modelYear) : null} />
+              <Info label="Indicado por el taller" value={`${MODEL_NAMES[order.vehicleModelId]} ${order.vehicleYear}`} />
+              <Info label="Según el VIN" value={car ? [car.make, car.modelId ? MODEL_NAMES[car.modelId] : car.model].filter(Boolean).join(" ") || null : null} />
+              <Info label="Año según el VIN" value={car?.modelYear ? String(car.modelYear) : null} />
               <Info label="Motor" value={car?.engine ?? null} />
               <Info label="Versión" value={car?.trim ?? null} />
               <Info label="Fuente" value={car?.source === "nhtsa" ? "NHTSA" : "Solo lectura local"} />

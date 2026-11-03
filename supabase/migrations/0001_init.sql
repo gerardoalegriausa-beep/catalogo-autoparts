@@ -89,6 +89,8 @@ create table orders (
   phone text not null,
   email text,
   vin text not null check (length(vin) = 17),
+  vehicle_model_id text not null references vehicle_models(id),
+  vehicle_year int not null,
   vin_decoded jsonb,
   vin_warnings text[] not null default '{}',
   fitment jsonb not null,

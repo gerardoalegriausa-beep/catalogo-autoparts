@@ -17,3 +17,23 @@ export function parseFilter(sp: Search): PartFilter {
   };
 }
 
+
+export type VehicleChoice = { modelId?: ModelId; year?: number };
+
+/** "modelo=xc60&anio=2020" para mantener el vehículo elegido entre páginas. */
+export function vehicleQuery(v: VehicleChoice): string {
+  const params = new URLSearchParams();
+  if (v.modelId) params.set("modelo", v.modelId);
+  if (v.year) params.set("anio", String(v.year));
+  return params.toString();
+}
+
+export function withQuery(path: string, query: string): string {
+  return query ? `${path}?${query}` : path;
+}
+
+/** Años que se ofrecen en los selectores, del más reciente al más antiguo. */
+export function yearOptions(currentYear: number): number[] {
+  const from = 2010;
+  return Array.from({ length: currentYear + 2 - from }, (_, i) => currentYear + 1 - i);
+}

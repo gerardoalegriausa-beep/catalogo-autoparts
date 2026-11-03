@@ -119,6 +119,8 @@ export type Order = {
   phone: string;
   email: string | null;
   vin: string;
+  vehicleModelId: ModelId; // modelo que eligió el taller
+  vehicleYear: number; // año que eligió el taller
   vinDecoded: VinDecoded | null;
   vinWarnings: string[];
   fitment: FitmentResult;

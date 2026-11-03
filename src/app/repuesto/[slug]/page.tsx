@@ -7,36 +7,40 @@ import { getPartBySlug } from "@/lib/catalog";
 import { CATEGORY_NAMES, CONDITION_LABELS, MODEL_NAMES } from "@/lib/catalog-labels";
 import { getPricingConfig, getStageDays } from "@/lib/config";
 import { totalLeadDays } from "@/lib/eta";
-import { fitmentYears } from "@/lib/fitment";
+import { parseFilter, vehicleQuery, withQuery, type Search } from "@/lib/catalog-filter";
+import { checkFitment, fitmentYears } from "@/lib/fitment";
 import { priceBreakdown } from "@/lib/pricing";
+import type { ModelId, Part } from "@/lib/types";
 
 export async function generateMetadata({ params }: PageProps<"/repuesto/[slug]">) {
   const part = await getPartBySlug((await params).slug);
   return { title: part?.name ?? "Repuesto" };
 }
 
-export default function PartPage({ params }: PageProps<"/repuesto/[slug]">) {
+export default function PartPage({ params, searchParams }: PageProps<"/repuesto/[slug]">) {
   return (
     <Suspense fallback={<div className="mx-auto max-w-6xl px-4 py-8 text-sm text-ink-soft">Cargando…</div>}>
-      <PartDetail params={params} />
+      <PartDetail params={params} searchParams={searchParams} />
     </Suspense>
   );
 }
 
-async function PartDetail({ params }: { params: Promise<{ slug: string }> }) {
+async function PartDetail({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<Search> }) {
   const part = await getPartBySlug((await params).slug);
   if (!part) notFound();
+  const { modelId, year } = parseFilter(await searchParams);
+  const vq = vehicleQuery({ modelId, year });
   const price = priceBreakdown(part, getPricingConfig());
   const leadDays = totalLeadDays(getStageDays());
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
       <nav className="text-sm text-ink-soft">
-        <Link href="/catalogo" className="hover:text-accent">
+        <Link href={withQuery("/catalogo", vq)} className="hover:text-accent">
           Catálogo
         </Link>{" "}
         /{" "}
-        <Link href={`/catalogo?categoria=${part.categoryId}`} className="hover:text-accent">
+        <Link href={withQuery("/catalogo", [vq, `categoria=${part.categoryId}`].filter(Boolean).join("&"))} className="hover:text-accent">
           {CATEGORY_NAMES[part.categoryId]}
         </Link>
       </nav>
@@ -105,8 +109,9 @@ async function PartDetail({ params }: { params: Promise<{ slug: string }> }) {
         </div>
 
         <aside className="card h-fit p-6 lg:sticky lg:top-6">
+          {modelId && year && <VehicleFit part={part} modelId={modelId} year={year} />}
           <PriceBreakdown price={price} />
-          <Link href={`/pedir/${part.slug}`} className="btn-primary mt-6 w-full">
+          <Link href={withQuery(`/pedir/${part.slug}`, vq)} className="btn-primary mt-6 w-full">
             Pedir con el VIN del vehículo
           </Link>
           <p className="mt-3 text-center text-xs text-ink-soft">
@@ -115,5 +120,46 @@ async function PartDetail({ params }: { params: Promise<{ slug: string }> }) {
         </aside>
       </div>
     </div>
+  );
+}
+
+function VehicleFit({ part, modelId, year }: { part: Part; modelId: ModelId; year: number }) {
+  const car = `${MODEL_NAMES[modelId]} ${year}`;
+  const result = checkFitment(part, {
+    make: "VOLVO",
+    model: MODEL_NAMES[modelId],
+    modelId,
+    modelYear: year,
+    engine: null,
+    engineCode: null,
+    displacementL: null,
+    fuel: null,
+    bodyClass: null,
+    trim: null,
+    source: "local",
+  });
+  if (result.status === "compatible") {
+    return (
+      <p className="mb-5 rounded-lg border border-ok/30 bg-ok-soft p-3 text-sm text-ok">
+        <span className="font-semibold">Sirve para tu {car}.</span> Lo confirmamos con el VIN al pedir.
+      </p>
+    );
+  }
+  if (result.status === "incompatible") {
+    return (
+      <p className="mb-5 rounded-lg border border-bad/30 bg-bad-soft p-3 text-sm text-bad">
+        <span className="font-semibold">No sirve para tu {car}.</span>{" "}
+        <Link href={withQuery("/catalogo", vehicleQuery({ modelId, year }) + `&categoria=${part.categoryId}`)} className="underline">
+          Ver repuestos de {CATEGORY_NAMES[part.categoryId].toLowerCase()} para tu {car}
+        </Link>
+      </p>
+    );
+  }
+  const engines = [...new Set(part.fitments.filter((f) => f.modelId === modelId && f.engine).map((f) => f.engine))];
+  return (
+    <p className="mb-5 rounded-lg border border-warn/30 bg-warn-soft p-3 text-sm text-warn">
+      <span className="font-semibold">Sirve para tu {car}{engines.length ? ` con motor ${engines.join(" o ")}` : ""}.</span> Con el
+      VIN confirmamos el motor antes de comprar.
+    </p>
   );
 }

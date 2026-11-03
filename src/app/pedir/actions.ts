@@ -6,7 +6,9 @@ import { getPricingConfig, getStageDays } from "@/lib/config";
 import { buildTimeline, estimatedDelivery } from "@/lib/eta";
 import { priceBreakdown } from "@/lib/pricing";
 import { getStore } from "@/lib/store";
-import { inspectVin, type VinInspection } from "@/lib/vin-inspection";
+import { MODEL_NAMES } from "@/lib/catalog-labels";
+import type { ModelId } from "@/lib/types";
+import { inspectVin, type DeclaredVehicle, type VinInspection } from "@/lib/vin-inspection";
 
 export type OrderFormState = {
   errors: Partial<Record<OrderField, string>>;
@@ -21,6 +23,8 @@ type OrderField =
   | "phone"
   | "email"
   | "vin"
+  | "vehicleModel"
+  | "vehicleYear"
   | "oldPartNumber"
   | "quantity"
   | "customerNotes";
@@ -32,16 +36,31 @@ const FIELDS: OrderField[] = [
   "phone",
   "email",
   "vin",
+  "vehicleModel",
+  "vehicleYear",
   "oldPartNumber",
   "quantity",
   "customerNotes",
 ];
 
 /** Vista previa: lo que el sistema lee del VIN y si la pieza es compatible. */
-export async function previewVin(slug: string, vin: string): Promise<VinInspection | { error: string }> {
+export async function previewVin(
+  slug: string,
+  vin: string,
+  modelId: string,
+  year: string,
+): Promise<VinInspection | { error: string }> {
   const part = await getPartBySlug(slug);
   if (!part) return { error: "La pieza ya no está disponible." };
-  return inspectVin(String(vin).slice(0, 30), part);
+  return inspectVin(String(vin).slice(0, 30), part, parseDeclared(modelId, year));
+}
+
+function parseDeclared(modelId: string, year: string): DeclaredVehicle {
+  const y = Number(year);
+  return {
+    modelId: modelId in MODEL_NAMES ? (modelId as ModelId) : null,
+    year: Number.isInteger(y) && y >= 2000 && y <= 2100 ? y : null,
+  };
 }
 
 export async function createOrder(slug: string, _prev: OrderFormState, form: FormData): Promise<OrderFormState> {
@@ -70,10 +89,16 @@ export async function createOrder(slug: string, _prev: OrderFormState, form: For
   }
   if (values.customerNotes.length > 500) errors.customerNotes = "Máximo 500 caracteres.";
 
-  const vin = await inspectVin(values.vin, part);
+  const declared = parseDeclared(values.vehicleModel, values.vehicleYear);
+  if (!declared.modelId) errors.vehicleModel = "Elige el modelo.";
+  if (!declared.year) errors.vehicleYear = "Elige el año.";
+
+  const vin = await inspectVin(values.vin, part, declared);
   values.vin = vin.vin;
   if (!vin.valid) {
     errors.vin = vin.errors.join(" ");
+  } else if (vin.mismatch) {
+    errors.vin = vin.mismatch;
   } else if (vin.fitment?.status === "incompatible") {
     errors.vin = `${vin.fitment.reason} Revisa el VIN o elige otra pieza.`;
   }
@@ -91,6 +116,8 @@ export async function createOrder(slug: string, _prev: OrderFormState, form: For
     phone: phoneDigits,
     email: values.email || null,
     vin: vin.vin,
+    vehicleModelId: declared.modelId!,
+    vehicleYear: declared.year!,
     vinDecoded: vin.vehicle,
     vinWarnings: vin.warnings,
     fitment: vin.fitment ?? { status: "sin_datos", reason: "Sin revisar" },

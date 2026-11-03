@@ -36,7 +36,6 @@ async function Tracking({
   const cancelled = order.status === "cancelado";
   const steps = buildTimeline(order.status, order.events, order.createdAt, getStageDays(), new Date());
   const eta = estimatedDelivery(steps);
-  const car = order.vinDecoded;
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">
@@ -86,12 +85,10 @@ async function Tracking({
         <div className="space-y-6">
           <section className="card p-6 text-sm">
             <h2 className="mb-3 font-semibold">Vehículo</h2>
-            <p className="font-mono tracking-wider">{order.vin}</p>
-            {car && (car.modelId || car.model) && (
-              <p className="mt-1 text-ink-soft">
-                {[car.make, car.modelId ? MODEL_NAMES[car.modelId] : car.model, car.modelYear].filter(Boolean).join(" ")}
-              </p>
-            )}
+            <p className="font-medium">
+              Volvo {MODEL_NAMES[order.vehicleModelId]} {order.vehicleYear}
+            </p>
+            <p className="mt-1 font-mono tracking-wider text-ink-soft">{order.vin}</p>
             {order.oldPartNumber && (
               <p className="mt-3 text-ink-soft">
                 N.º de parte anterior: <span className="font-mono text-ink">{order.oldPartNumber}</span>

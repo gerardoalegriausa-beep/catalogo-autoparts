@@ -11,11 +11,11 @@ export function modelsSummary(part: Part): string {
   return ids.map((id) => MODEL_NAMES[id]).join(" · ");
 }
 
-export function PartCard({ part }: { part: Part }) {
+export function PartCard({ part, query = "" }: { part: Part; query?: string }) {
   const price = priceBreakdown(part, getPricingConfig());
   return (
     <Link
-      href={`/repuesto/${part.slug}`}
+      href={query ? `/repuesto/${part.slug}?${query}` : `/repuesto/${part.slug}`}
       className="card group flex flex-col gap-3 p-4 transition-shadow hover:shadow-md"
     >
       <div className="flex items-start justify-between gap-3">

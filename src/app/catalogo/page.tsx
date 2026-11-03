@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
-import { connection } from "next/server";
+import Link from "next/link";
 import { Suspense } from "react";
 import { PartCard } from "@/components/part-card";
-import { filterParts, getParts } from "@/lib/catalog";
-import { CATEGORIES, CATEGORY_NAMES, MODELS, MODEL_NAMES } from "@/lib/catalog-labels";
-import { parseFilter, type Search } from "@/lib/catalog-filter";
+import { VehiclePicker } from "@/components/vehicle-picker";
+import { filterParts, getParts, getVehicleYears } from "@/lib/catalog";
+import { CATEGORIES, CATEGORY_NAMES, MODEL_NAMES } from "@/lib/catalog-labels";
+import { parseFilter, vehicleQuery, withQuery, type Search } from "@/lib/catalog-filter";
 
 export const metadata: Metadata = { title: "Catálogo" };
 
@@ -21,26 +22,51 @@ export default function CatalogPage({ searchParams }: PageProps<"/catalogo">) {
 
 async function Results({ searchParams }: { searchParams: Promise<Search> }) {
   const filter = parseFilter(await searchParams);
-  await connection(); // la lista de años usa la fecha actual
-  const parts = filterParts(await getParts(), filter);
-  const years = Array.from({ length: new Date().getFullYear() + 2 - 2016 }, (_, i) => 2016 + i).reverse();
+  const [all, years] = await Promise.all([getParts(), getVehicleYears()]);
+  const parts = filterParts(all, filter);
+  const vehicle = { modelId: filter.modelId, year: filter.year };
+  const vq = vehicleQuery(vehicle);
+  const hasVehicle = Boolean(filter.modelId && filter.year);
+  const vehicleName = filter.modelId ? `Volvo ${MODEL_NAMES[filter.modelId]}${filter.year ? ` ${filter.year}` : ""}` : null;
+  const keep = { categoria: filter.categoryId, q: filter.q };
 
   return (
     <>
-      <form className="card mt-5 grid gap-3 p-4 sm:grid-cols-[1fr_1fr_auto_1.5fr_auto] sm:items-end" action="/catalogo">
-        <div>
-          <label className="label" htmlFor="modelo">
-            Modelo
-          </label>
-          <select id="modelo" name="modelo" defaultValue={filter.modelId ?? ""} className="field">
-            <option value="">Todos</option>
-            {MODELS.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
-          </select>
-        </div>
+      {/* 1. Vehículo */}
+      {hasVehicle ? (
+        <section className="card mt-5 flex flex-wrap items-center justify-between gap-3 border-brand/30 p-4">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-ink-soft">Buscando repuestos para</p>
+            <p className="text-lg font-bold text-brand">{vehicleName}</p>
+          </div>
+          <details className="w-full sm:w-auto">
+            <summary className="btn-secondary cursor-pointer list-none">Cambiar vehículo</summary>
+            <div className="mt-3 sm:w-[32rem]">
+              <VehiclePicker years={years} initial={vehicle} keep={keep} />
+              <Link href={withQuery("/catalogo", new URLSearchParams(cleanParams(keep)).toString())} className="mt-2 inline-block text-sm text-accent">
+                Ver todos los modelos
+              </Link>
+            </div>
+          </details>
+        </section>
+      ) : (
+        <section className="card mt-5 p-4">
+          <p className="font-semibold">¿Para qué vehículo es el repuesto?</p>
+          <p className="mb-3 text-sm text-ink-soft">
+            Elige modelo y año para ver solo lo que le sirve. También puedes{" "}
+            <Link href="/vin" className="font-medium text-accent">
+              buscar con el VIN
+            </Link>{" "}
+            o seguir explorando todo el catálogo.
+          </p>
+          <VehiclePicker years={years} initial={vehicle} keep={keep} />
+        </section>
+      )}
+
+      {/* 2. Pieza */}
+      <form className="mt-4 grid gap-3 sm:grid-cols-[1fr_1.5fr_auto] sm:items-end" action="/catalogo">
+        {filter.modelId && <input type="hidden" name="modelo" value={filter.modelId} />}
+        {filter.year && <input type="hidden" name="anio" value={filter.year} />}
         <div>
           <label className="label" htmlFor="categoria">
             Categoría
@@ -55,34 +81,21 @@ async function Results({ searchParams }: { searchParams: Promise<Search> }) {
           </select>
         </div>
         <div>
-          <label className="label" htmlFor="anio">
-            Año
-          </label>
-          <select id="anio" name="anio" defaultValue={filter.year ? String(filter.year) : ""} className="field">
-            <option value="">Todos</option>
-            {years.map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
           <label className="label" htmlFor="q">
-            Buscar
+            Nombre, marca o N.º de parte
           </label>
           <input id="q" name="q" defaultValue={filter.q ?? ""} placeholder="Ej.: bomba de agua, ABS" className="field" />
         </div>
-        <button className="btn-primary" type="submit">
-          Filtrar
+        <button className="btn-secondary" type="submit">
+          Buscar
         </button>
       </form>
 
       <p className="mt-6 text-sm text-ink-soft">
         {parts.length === 1 ? "1 repuesto" : `${parts.length} repuestos`}
-        {filter.modelId && ` para ${MODEL_NAMES[filter.modelId]}`}
-        {filter.year && ` ${filter.year}`}
+        {vehicleName && ` para ${vehicleName}`}
         {filter.categoryId && ` en ${CATEGORY_NAMES[filter.categoryId]}`}
+        {filter.q && ` que coinciden con “${filter.q}”`}
       </p>
 
       {parts.length === 0 ? (
@@ -95,10 +108,14 @@ async function Results({ searchParams }: { searchParams: Promise<Search> }) {
       ) : (
         <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {parts.map((p) => (
-            <PartCard key={p.id} part={p} />
+            <PartCard key={p.id} part={p} query={vq} />
           ))}
         </div>
       )}
     </>
   );
+}
+
+function cleanParams(params: Record<string, string | undefined>): Record<string, string> {
+  return Object.fromEntries(Object.entries(params).filter((e): e is [string, string] => Boolean(e[1])));
 }
